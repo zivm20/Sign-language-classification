@@ -1,4 +1,5 @@
 tensorflow-gpu<2.11
+cv2
 attrs
 backcall
 bleach
