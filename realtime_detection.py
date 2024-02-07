@@ -3,11 +3,11 @@ import cv2
 import argparse
 import os
 import time
-import model_params
-
+from model_params import *
+import numpy as np
 
 def record_camera(model, duration=10):
-    cap = cv2.VideoCapture(0)  # Change the index if you have multiple cameras
+    cap = cv2.VideoCapture(1)  # Change the index if you have multiple cameras
 
     # Check if the camera is opened successfully
     if not cap.isOpened():
@@ -21,20 +21,25 @@ def record_camera(model, duration=10):
     start_time = cv2.getTickCount()
     end_time = start_time + duration * cv2.getTickFrequency()
 
-    while cv2.getTickCount() < end_time:
+    while True:
         ret, frame = cap.read()
 
         if not ret:
             print("Failed to capture frame from camera")
             break
-        model_input = model_params.preProcessing(frame)
-        model.predict(model_input)
-        # ADD PRINT RESULT
-        #
+        model_input = preProcessing(frame)
+        pred = model.predict(model_input)
+        score = tf.nn.softmax(pred[0])
+        className = CLASS_NAMES[np.argmax(score)]
+        org = (200,200)
+        frame = cv2.putText(frame,className,org = org,fontFace=cv2.FONT_HERSHEY_SIMPLEX,fontScale=2,thickness=2,color=(255,0,0))
+        
 
         # Display the live camera feed
         cv2.imshow("Camera Feed", frame)
-        cv2.waitKey(1)
+        key = 0xFF & cv2.waitKey(1)
+        if key == ord('q'):
+            break
 
         
 
@@ -45,14 +50,11 @@ def record_camera(model, duration=10):
 
 if __name__ == "__main__":
     # Parse command-line arguments
-    parser = argparse.ArgumentParser(description="Record screen or camera input.")
-    parser.add_argument("mode", choices=["screen", "camera"], help="Mode: 'screen' or 'camera'")
-    parser.add_argument("duration", type=int, help="Duration in seconds")
-    parser.add_argument("--folder", help="Folder name to store the video")
-    args = parser.parse_args()
+    print(tf.config.list_physical_devices('GPU'))
 
     # Create the folder if it doesn't exist
     model = tf.keras.models.load_model('my_model.keras')
+    
     record_camera(model)
 
     

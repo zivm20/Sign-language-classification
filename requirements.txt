@@ -1,5 +1,5 @@
 tensorflow-gpu<2.11
-cv2
+opencv-python
 attrs
 backcall
 bleach
