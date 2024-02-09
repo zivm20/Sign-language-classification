@@ -1,5 +1,7 @@
-tensorflow-gpu<2.11
+tensorflow-gpu===2.8.3
+tensorflow-datasets
 opencv-python
+tensorboard-plugin-profile
 attrs
 backcall
 bleach
