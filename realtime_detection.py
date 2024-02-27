@@ -40,16 +40,22 @@ def record_camera(model, duration=10):
         if not ret:
             print("Failed to capture frame from camera")
             break
-        
-        pred = model(preProcessing(frame))
+        bbox = (300,300,128,128)
+        model_input = frame[bbox[1]:bbox[1]+bbox[3],bbox[0]:bbox[0]+bbox[2]]
+        #model_input = preProcessing(model_input)
+        pred = model(preProcessing(model_input))
         score = tf.nn.softmax(pred[0])
         className = CLASS_NAMES[np.argmax(score)]
-        org = (200,200)
-        frame = cv2.putText(frame,className,org = org,fontFace=cv2.FONT_HERSHEY_SIMPLEX,fontScale=2,thickness=2,color=(255,0,0))
+        
+        frame = cv2.putText(frame,className,org=(int(bbox[0]+bbox[3]/2),bbox[1]+bbox[2]),fontFace=cv2.FONT_HERSHEY_SIMPLEX,fontScale=2,thickness=2,color=(255,0,0))
+        frame = cv2.rectangle(frame,(bbox[0],bbox[1]),(bbox[0]+bbox[2],bbox[1]+bbox[3]),(255,0,0),2)
+        
         
 
         # Display the live camera feed
         cv2.imshow("Camera Feed", frame)
+        # Display the live camera feed
+        cv2.imshow("model", model_input)
         key = 0xFF & cv2.waitKey(1)
         if key == ord('q'):
             break
@@ -66,8 +72,9 @@ if __name__ == "__main__":
     print(tf.config.list_physical_devices('GPU'))
 
     # Create the folder if it doesn't exist
-    model = create_model(len(CLASS_NAMES),create_transformation_layer())
-    model.load_weights('cnn_RB2_10eW.keras')
+    #model = create_model(len(CLASS_NAMES),create_transformation_layer())
+    model = create_model(len(CLASS_NAMES))
+    model.load_weights('resnet_model.keras')
     record_camera(model)
 
     

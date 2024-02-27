@@ -1,57 +1,11 @@
 import tensorflow as tf
 from model_params import *
 import numpy as np
-
-
-CROP_SHAPE = (96,96)
-ROTATION_FACTOR = 0.3
-CONTRAST_FACTOR = 0.8
-
-
-class TransformPipeline:
-    def __init__(self, transforms:list):
-        self.transforms = transforms
-        
-    def transform(self,image:tf.Tensor, label):
-        for T in self.transforms:
-            image = T(image,label)
-        return image,label
-
-
-def crop(image, label):
-    
-    return tf.image.random_crop(image,size=CROP_SHAPE), label
-
-def contrast(image, label):
-    return tf.image.random_contrast(image,1-CONTRAST_FACTOR,1+CONTRAST_FACTOR), label
-
-def flip(image, label):
-    return tf.image.random_flip_up_down(image), label
-
-
-class TransformLayer(tf.keras.Model):
-    def __init__(self, layers:list=[], input_shape=INPUT_SHAPE):
-        super(TransformLayer,self).__init__(name='transform')
-        if len(layers) == 0:
-            layers.append(tf.keras.layers.Resizing(input_shape[0],input_shape[1]))
-        self.transformations = layers
-        
-    def call(self, input_tensor, training=False):
-        for T in self.transformations:
-            input_tensor = T(input_tensor,training=training)
-        return input_tensor
-    
-
-def create_transformation_layer():
-    transforms = []
-    transforms.append(tf.keras.layers.Rescaling(1./255))
-    transforms.append(tf.keras.layers.CenterCrop(IMG_DIM[0]-10,IMG_DIM[1]-10))
-    transforms.append(tf.keras.layers.RandomRotation(ROTATION_FACTOR))
-    transforms.append(tf.keras.layers.RandomCrop(CROP_SHAPE[0],CROP_SHAPE[1]))
-    transforms.append(tf.keras.layers.Resizing(INPUT_SHAPE[0],INPUT_SHAPE[1]))
-    transforms.append(tf.keras.layers.RandomContrast(CONTRAST_FACTOR))
-    
-    return transforms 
+import os
+import json
+import glob
+import matplotlib.pyplot as plt
+from keras.preprocessing.image import image_dataset_from_directory
 
 class ResnetBlock(tf.keras.Model):
     def __init__(self, kernel_size, filt, filt_in=None,filt_out=None,num=3,conv_block=False,stride=1,bottleNeck=True, name=None):
@@ -59,7 +13,7 @@ class ResnetBlock(tf.keras.Model):
         self.kernel_size = kernel_size
         self.filt = filt
         self.num = num
-        self.bottleNck=bottleNeck
+        self.bottleNeck=bottleNeck
         if filt_out == None and filt_in == None:
             filt_out = filt*stride
         elif filt_out == None:
@@ -100,10 +54,6 @@ class ResnetBlock(tf.keras.Model):
         if self.conv_block:
             self.x_shortcut = [tf.keras.layers.Conv2D(self.filt_out, kernel_size,padding='same',strides=stride),
                                tf.keras.layers.BatchNormalization()]
-        
-
-        
-
     def call(self, input_tensor, training=False):
         x_in = input_tensor
         x = input_tensor
@@ -126,10 +76,8 @@ class ResnetBlock(tf.keras.Model):
         return {"kernel_size": self.kernel_size, "filt":self.filt,"filt_in":self.filt_in,"filt_out":self.filt_out,"num":self.num,"conv_block":self.conv_block,"stride":self.stride,"bottleNeck":self.bottleNeck}
 
 
-
-def create_model(num_classes,transformation):
+def create_model(num_classes):
     model = tf.keras.Sequential([
-        transformation,
         tf.keras.layers.Conv2D(32, 7,padding='same',strides=1),#56x56
         ResnetBlock(5,filt=64,filt_in=32,num=2,stride=2),#28x28
         ResnetBlock(5,filt=64,num=2),
@@ -145,8 +93,145 @@ def create_model(num_classes,transformation):
         tf.keras.layers.Dense(num_classes)
         ])
 
-    model(tf.ones((1,*IMG_DIM)))
+    
+    model.build([None,*INPUT_SHAPE])
     return model
 
 
 
+
+@tf.function
+def preprocess(image,label,train=False):
+    
+    #if train:
+        #image = tf.image.random_crop(image,(len(image),CROP_SHAPE[0],CROP_SHAPE[0],3))
+    image = tf.image.resize(image, (int(INPUT_SHAPE[0]), int(INPUT_SHAPE[1])))/255.0
+    if train:
+        
+        image = tf.image.random_flip_left_right(image)
+        image = tf.image.random_flip_up_down(image)
+
+        image = tf.image.random_hue(image,0.5)
+        image = tf.image.random_saturation(image,0.5,1.5)
+        image = tf.image.random_brightness(image,0.2)
+        image = tf.image.random_contrast(image,0.5,1.5)
+        
+        
+        
+        
+    return image,label
+
+@tf.function
+def load_resize_image(filename,label,img_dim=IMG_DIM):
+    raw = tf.io.read_file(filename)
+    image = tf.image.decode_jpeg(raw, channels=3)
+    image = tf.image.resize(image, (int(img_dim[0]), int(img_dim[1])))
+    
+    return image,label
+
+# Function to preprocess images
+def resize_image(image, label,img_dim=IMG_DIM):
+    image = tf.image.resize(image, (int(img_dim[0]), int(img_dim[1])))
+    return image, label
+
+# Function to load dataset from directory
+def load_dataset(path:str,
+                 train_val_split:tuple=TRAIN_VAL_SPLIT, 
+                 batch_size:int=BATCH_SIZE, 
+                 img_dim:tuple=IMG_DIM, 
+                 seed:int=None,
+                 cacheDir:str=CACHE_DIR,
+                 parrallelCalls:int=tf.data.experimental.AUTOTUNE):
+    
+    
+    assert(len(train_val_split)==2)
+    assert(train_val_split[0]+train_val_split[1] < 1.0)
+
+    train_ds = image_dataset_from_directory(path,shuffle=True,
+                                           validation_split=2*train_val_split[1],
+                                           subset='training',
+                                           image_size=(img_dim[0], img_dim[1]),
+                                           batch_size=None,
+                                           seed=seed)
+    
+    dataset_val_test = image_dataset_from_directory(path,shuffle=True,
+                                           validation_split=2*train_val_split[1],
+                                           subset='validation',
+                                           image_size=(img_dim[0], img_dim[1]),
+                                           batch_size=batch_size,
+                                           seed=seed)
+    
+    
+
+    val_size = len(dataset_val_test)//2
+    test_size = len(dataset_val_test) - val_size
+    
+    val_ds = dataset_val_test.take(val_size)
+    test_ds = dataset_val_test.skip(val_size).take(test_size)
+    
+    
+    if cacheDir != None:
+        
+        val_ds = val_ds.cache()
+        test_ds = test_ds.cache()
+    
+    
+    val_ds = val_ds.prefetch(parrallelCalls)
+    test_ds = test_ds.prefetch(parrallelCalls)
+    return train_ds, val_ds, test_ds, dataset_val_test.class_names
+
+def preprocess_ds(train_ds:tf.data.Dataset, preprocessing_function:callable, parrallelCalls:int=tf.data.experimental.AUTOTUNE, cacheFile:str=None,train=False):
+    train_ds = train_ds.map(lambda image, label: (preprocessing_function(image,label,train)),num_parallel_calls=parrallelCalls)
+    
+    
+    return train_ds
+    
+def evaluate_model(model:tf.keras.Model, test_ds:tf.data.Dataset, verbose:int=1, savePath:str=None):
+    
+    results = model.evaluate(test_ds)
+    if verbose > 0:
+        print("Test loss: "+str(results[0]))
+        print("Test accuracy: "+str(results[1]))
+
+    if savePath != None:
+        model.save(savePath)
+        if verbose > 0:
+            print("Model saved to "+savePath)
+        
+    return results
+
+def learning_rate_scheduler(epoch, lr):
+    if epoch < 10:
+        return lr
+    else:
+        return lr * tf.math.exp(-0.1)
+    
+def plot_learning_curve(history:tf.keras.callbacks.History, metric:str='accuracy', title:str='Learning Curve',save_fig:bool=False):
+    plt.plot(history.history[metric])
+    plt.plot(history.history['val_'+metric])
+    plt.title(title)
+    plt.ylabel(metric)
+    plt.xlabel('epoch')
+    plt.legend(['train', 'val'], loc='upper left')
+    if save_fig:
+        plt.savefig("learning curves/"+title+'.png')
+
+def confusion_matrix(model:tf.keras.Model, test_ds:tf.data.Dataset, normalize:bool=True, title:str='Confusion Matrix',save_fig:bool=False):
+    y_pred = model.predict(test_ds)
+    y_pred = np.argmax(y_pred, axis=1)
+    y_true = [label.numpy() for _, label in test_ds.unbatch()]
+    y_true = tf.constant(y_true)
+    
+    print(y_true)
+    cm = tf.math.confusion_matrix(y_true, y_pred)
+    if normalize:
+        cm = cm/cm.numpy().sum(axis=1)[:, tf.newaxis]
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    plt.title(title)
+    plt.colorbar()
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    if save_fig:
+        plt.savefig("confusion/"+title+'.png')
+    
+    
