@@ -206,15 +206,36 @@ def learning_rate_scheduler(epoch, lr):
     else:
         return lr * tf.math.exp(-0.1)
     
-def plot_learning_curve(history:tf.keras.callbacks.History, metric:str='accuracy', title:str='Learning Curve',save_fig:bool=False):
-    plt.plot(history.history[metric])
-    plt.plot(history.history['val_'+metric])
-    plt.title(title)
-    plt.ylabel(metric)
-    plt.xlabel('epoch')
-    plt.legend(['train', 'val'], loc='upper left')
+def plot_learning_curve(history:tf.keras.callbacks.History,subplot:plt.Axes=None, metric:str='accuracy', title:str='Learning Curve',save_fig:bool=False):
+    if subplot != None:
+        subplot.plot(history.history[metric])
+        subplot.plot(history.history['val_'+metric])
+        subplot.set_title(title)
+        subplot.set_xlabel(metric)
+        subplot.set_xlabel('epoch')
+        subplot.legend(['train', 'val'], loc='upper left')
+    if subplot == None:
+        plt.plot(history.history[metric])
+        plt.plot(history.history['val_'+metric])
+        plt.title(title)
+        plt.ylabel(metric)
+        plt.xlabel('epoch')
+        plt.legend(['train', 'val'], loc='upper left')
+        if save_fig:
+            plt.savefig("learning curves/"+title+'.png')
+
+def plot_curves(history:tf.keras.callbacks.History,save_fig:bool=False,title:str='Model Learning Curves'):
+    fig, axs = plt.subplots(1,2,figsize=(10,5))
+    plt.suptitle(title)
+    plot_learning_curve(history,subplot=axs[0],metric='accuracy',title='Accuracy')
+    plot_learning_curve(history,subplot=axs[1],metric='loss',title='Loss')
+    
     if save_fig:
-        plt.savefig("learning curves/"+title+'.png')
+        plt.savefig("learning curves/"+title+".png")
+        
+    
+
+
 
 def confusion_matrix(model:tf.keras.Model, test_ds:tf.data.Dataset, normalize:bool=True, title:str='Confusion Matrix',save_fig:bool=False):
     y_pred = model.predict(test_ds)
@@ -226,7 +247,7 @@ def confusion_matrix(model:tf.keras.Model, test_ds:tf.data.Dataset, normalize:bo
     cm = tf.math.confusion_matrix(y_true, y_pred)
     if normalize:
         cm = cm/cm.numpy().sum(axis=1)[:, tf.newaxis]
-    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    plt.imshow(cm, interpolation='nearest', cmap='cool')
     plt.title(title)
     plt.colorbar()
     plt.xlabel('Predicted')
