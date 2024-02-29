@@ -7,19 +7,12 @@ from model_params import *
 import numpy as np
 from dataTransformer import *
 
+bboxY = 200
+bboxX = 200
 
-def create_transformation_layer():
-    transforms = []
-    transforms.append(tf.keras.layers.Rescaling(1./255))
-    transforms.append(tf.keras.layers.CenterCrop(IMG_DIM[0]-10,IMG_DIM[1]-10))
-    transforms.append(tf.keras.layers.RandomRotation(ROTATION_FACTOR))
-    transforms.append(tf.keras.layers.RandomCrop(CROP_SHAPE[0],CROP_SHAPE[1]))
-    transforms.append(tf.keras.layers.Resizing(INPUT_SHAPE[0],INPUT_SHAPE[1]))
-    transforms.append(tf.keras.layers.RandomContrast(CONTRAST_FACTOR))
-    
-    return transforms 
 
-def record_camera(model, duration=10):
+
+def record_camera(models, duration=10):
     cap = cv2.VideoCapture(1)  # Change the index if you have multiple cameras
 
     # Check if the camera is opened successfully
@@ -40,14 +33,17 @@ def record_camera(model, duration=10):
         if not ret:
             print("Failed to capture frame from camera")
             break
-        bbox = (300,300,128,128)
+        bbox = (bboxY,bboxX,128,128)
         model_input = frame[bbox[1]:bbox[1]+bbox[3],bbox[0]:bbox[0]+bbox[2]]
         #model_input = preProcessing(model_input)
-        pred = model(preProcessing(model_input))
-        score = tf.nn.softmax(pred[0])
-        className = CLASS_NAMES[np.argmax(score)]
+        colors = [(0,0,255),(0,255,0),(255,0,0),(255,255,0)]
+        for i, model in enumerate(models):
+            pred = model(preProcessing(model_input))
+            score = tf.nn.softmax(pred[0])
+            className = CLASS_NAMES[np.argmax(score)]
+            frame = cv2.putText(frame,className,org=(int(bbox[0]+bbox[3]/2),bbox[1]+bbox[2]+i*50),fontFace=cv2.FONT_HERSHEY_SIMPLEX,fontScale=2,thickness=2,color=colors[i%len(colors)])
         
-        frame = cv2.putText(frame,className,org=(int(bbox[0]+bbox[3]/2),bbox[1]+bbox[2]),fontFace=cv2.FONT_HERSHEY_SIMPLEX,fontScale=2,thickness=2,color=(255,0,0))
+        
         frame = cv2.rectangle(frame,(bbox[0],bbox[1]),(bbox[0]+bbox[2],bbox[1]+bbox[3]),(255,0,0),2)
         
         
@@ -73,8 +69,15 @@ if __name__ == "__main__":
 
     # Create the folder if it doesn't exist
     #model = create_model(len(CLASS_NAMES),create_transformation_layer())
-    model = create_model(len(CLASS_NAMES))
-    model.load_weights('resnet_model.keras')
-    record_camera(model)
+    resnet_model = create_resnet_model(len(CLASS_NAMES))
+    resnet_model.load_weights(MODEL_DIR+'/resnet_model.keras')
+    simple_cnn_model = create_simple_cnn_model(len(CLASS_NAMES))
+    simple_cnn_model.load_weights(MODEL_DIR+'/simple_cnn_model.keras')
+    nn_model = create_nn_model(len(CLASS_NAMES))
+    nn_model.load_weights(MODEL_DIR+'/nn_model.keras')
+    lr_model = create_lr_model(len(CLASS_NAMES))
+    lr_model.load_weights(MODEL_DIR+'/lr_model.keras')
+
+    record_camera([resnet_model,simple_cnn_model,nn_model,lr_model])
 
     

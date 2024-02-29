@@ -6,10 +6,12 @@ import numpy as np
 BATCH_SIZE = 32
 IMG_DIM = (128,128,3)
 CLASS_NAMES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'del', 'nothing', 'space']
-INPUT_SHAPE = (56,56,3)
+INPUT_SHAPE = (112,112,3)
 TRAIN_VAL_SPLIT = (0.6,0.2)
 CACHE_DIR = "cache"
-CROP_SHAPE = (96,96)
+CHECKPOINT_FILEPATH="checkpoints"
+BACKUP_FILEPATH="backups"
+MODEL_DIR = "models"
 ROTATION_FACTOR = 0.3
 CONTRAST_FACTOR = 0.8
 
@@ -37,3 +39,7 @@ def transform_box_T(box,original_image):
     newImg = cv2.rectangle(newImg,(int(box[0]),int(box[1])),(int(box[2]),int(box[3])),(255,0,0),2)
     
     return newImg, box
+
+
+
+
